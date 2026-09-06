@@ -205,8 +205,9 @@ pub fn search<Node: NodeType>(
     let tt_move = tt_entry.as_ref().map(|e| e.best_move()).filter(|m| !m.is_null());
     let tt_bound = tt_entry.as_ref().map(|e| e.bound());
     let tt_score = tt_entry.as_ref().map(|e| e.score()).filter(|s| *s != Score::NONE);
-    let tt_pv = tt_entry.as_ref().map(|e| e.is_pv()).unwrap_or(false);
+    let tt_was_pv = tt_entry.as_ref().map(|e| e.is_pv()).unwrap_or(false);
     let tt_depth = tt_entry.as_ref().map(|e| e.depth());
+    let tt_pv = Node::PV || tt_was_pv;
 
     // TT Cutoffs
     if !Node::PV
@@ -263,7 +264,7 @@ pub fn search<Node: NodeType>(
             data.board.hash(),
             0,
             ply,
-            Node::PV,
+            tt_pv,
         );
     }
 
@@ -387,8 +388,8 @@ pub fn search<Node: NodeType>(
         }
 
         if singular_score < singular_beta {
-            let double_margin = 10 + 150 * Node::PV as i32 + 50 * (Node::PV && !tt_pv) as i32;
-            let triple_margin = 100 + 351 * Node::PV as i32 + 55 * (Node::PV && !tt_pv) as i32;
+            let double_margin = 10 + 150 * Node::PV as i32 + 50 * (Node::PV && !tt_was_pv) as i32;
+            let triple_margin = 100 + 351 * Node::PV as i32 + 55 * (Node::PV && !tt_was_pv) as i32;
             extension = 1
                 + (singular_score < singular_beta - double_margin) as i32
                 + (singular_score < singular_beta - triple_margin) as i32;
@@ -644,7 +645,7 @@ pub fn search<Node: NodeType>(
             data.board.hash(),
             depth,
             ply,
-            Node::PV,
+            tt_pv,
         );
 
         // Update Correction Histories
@@ -679,6 +680,8 @@ pub fn quiesce<Node: NodeType>(data: &mut SearchData, mut alpha: i32, beta: i32,
     let tt_entry = data.shared.tt.entry(data.board.hash(), ply);
     let tt_bound = tt_entry.as_ref().map(|e| e.bound());
     let tt_score = tt_entry.as_ref().map(|e| e.score()).filter(|s| *s != Score::NONE);
+    let tt_was_pv = tt_entry.as_ref().map(|e| e.is_pv()).unwrap_or(false);
+    let tt_pv = Node::PV || tt_was_pv;
 
     // TT Cutoffs
     if !Node::PV
@@ -733,7 +736,7 @@ pub fn quiesce<Node: NodeType>(data: &mut SearchData, mut alpha: i32, beta: i32,
             data.board.hash(),
             0,
             ply,
-            Node::PV,
+            tt_pv,
         );
     }
 
@@ -748,7 +751,7 @@ pub fn quiesce<Node: NodeType>(data: &mut SearchData, mut alpha: i32, beta: i32,
                 data.board.hash(),
                 0,
                 ply,
-                Node::PV,
+                tt_pv,
             );
         }
 
@@ -835,7 +838,7 @@ pub fn quiesce<Node: NodeType>(data: &mut SearchData, mut alpha: i32, beta: i32,
         data.board.hash(),
         0,
         ply,
-        Node::PV,
+        tt_pv,
     );
 
     best_score
