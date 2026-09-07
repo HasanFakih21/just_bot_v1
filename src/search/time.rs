@@ -26,18 +26,13 @@ pub enum Nodes {
     Hard(u64),
 }
 
-#[derive(Debug, Clone)]
-struct TimeLimit {
-    pub soft: Duration,
-    pub hard: Duration,
-}
-
 #[derive(Debug, Clone, Default)]
 pub struct Limits {
     pub depth: Option<i32>,
-    pub nodes: Option<Nodes>,
-    time: Option<TimeLimit>,
-    exact: Option<Duration>,
+    exact: bool,
+    soft_bound: Option<Duration>,
+    hard_bound: Option<Duration>,
+    nodes: Option<Nodes>,
     mate: Option<u64>,
 }
 
@@ -54,24 +49,20 @@ impl TimeManager {
             let soft = (soft_scale * max_time as f64 + settings.inc as f64 * 0.75) as u64;
             let hard = (hard_scale * max_time as f64 + settings.inc as f64 * 0.75) as u64;
 
-            limits.time = Some(TimeLimit {
-                soft: Duration::from_millis(soft.min(max_time)),
-                hard: Duration::from_millis(hard.min(max_time)),
-            })
+            limits.soft_bound = Some(Duration::from_millis(soft.min(max_time)));
+            limits.hard_bound = Some(Duration::from_millis(hard.min(max_time)));
         } else if let Some(remaining_time) = settings.time
             && let Some(moves) = settings.movestogo
         {
             let max_time = remaining_time.saturating_sub(MOVE_OVERHEAD);
             let base = (max_time as f64 / moves as f64) + settings.inc as f64 * 0.75;
 
-            limits.time = Some(TimeLimit {
-                soft: Duration::from_millis(((1.0 * base) as u64).min(max_time)),
-                hard: Duration::from_millis(((5.0 * base) as u64).min(max_time)),
-            })
-        }
-
-        if let Some(movetime) = settings.movetime {
-            limits.exact = Some(Duration::from_millis(movetime.saturating_sub(MOVE_OVERHEAD)));
+            limits.soft_bound = Some(Duration::from_millis(((1.0 * base) as u64).min(max_time)));
+            limits.hard_bound = Some(Duration::from_millis(((5.0 * base) as u64).min(max_time)));
+        } else if let Some(movetime) = settings.movetime {
+            limits.soft_bound = Some(Duration::from_millis(movetime.saturating_sub(MOVE_OVERHEAD)));
+            limits.hard_bound = Some(Duration::from_millis(movetime.saturating_sub(MOVE_OVERHEAD)));
+            limits.exact = true;
         }
 
         limits.nodes = settings.nodes;
@@ -93,28 +84,32 @@ impl TimeManager {
     }
 
     pub fn soft_limit(&self, data: &SearchData, multiplier: impl Fn() -> f32) -> bool {
-        let time = if let Some(limit) = &self.limits.time {
-            self.elapsed() > Duration::from_secs_f32(limit.soft.as_secs_f32() * multiplier())
+        if self.limits.exact
+            && let Some(limit) = self.limits.soft_bound
+        {
+            self.elapsed() >= Duration::from_secs_f32(limit.as_secs_f32())
+        } else if let Some(limit) = self.limits.soft_bound {
+            self.elapsed() >= Duration::from_secs_f32(limit.as_secs_f32() * multiplier())
+        } else if let Some(Nodes::Soft(limit) | Nodes::Hard(limit)) = &self.limits.nodes {
+            data.nodes() >= *limit
         } else {
             false
-        };
-
-        let exact = if let Some(limit) = &self.limits.exact { self.elapsed() > *limit } else { false };
-        let nodes =
-            matches!(&self.limits.nodes, Some(Nodes::Soft(limit) | Nodes::Hard(limit)) if data.nodes() >= *limit);
-
-        time || exact || nodes
+        }
     }
 
     pub fn hard_limit(&self, data: &SearchData) -> bool {
-        if data.id != 0 || data.root_depth <= 1 || !data.nodes().is_multiple_of(2048) {
+        if data.id != 0 || data.root_depth <= 1 {
             return false;
         }
 
-        self.limits
-            .time
-            .as_ref()
-            .is_some_and(|limit| self.elapsed() > limit.hard)
-            || self.limits.exact.is_some_and(|limit| self.elapsed() > limit)
+        if data.nodes().is_multiple_of(2048)
+            && let Some(limit) = self.limits.hard_bound
+        {
+            self.elapsed() >= limit
+        } else if let Some(Nodes::Hard(limit)) = &self.limits.nodes {
+            data.nodes() >= *limit
+        } else {
+            false
+        }
     }
 }
