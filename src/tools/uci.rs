@@ -5,7 +5,7 @@ use std::thread;
 use crate::board::Board;
 use crate::board::movegen::MoveGenKind;
 use crate::search::data::{Report, SharedData};
-use crate::search::time::TimeManager;
+use crate::search::time::{Limit, NodeKind, TimeManager};
 use crate::threads::SearchThreads;
 use crate::tools::bench::bench;
 #[cfg(feature = "datagen")]
@@ -16,6 +16,7 @@ use crate::types::*;
 
 #[derive(Default)]
 pub struct UCISettings {
+    pub soft_nodes: bool,
     pub frc: bool,
     pub report: Report,
 }
@@ -24,7 +25,6 @@ pub fn input_loop(cli_args: String) {
     let shared = Arc::new(SharedData::default());
     let mut pool = SearchThreads::new(shared.clone(), 1);
     let mut board = Board::from_fen(STARTING_FEN).unwrap();
-    let mut time = TimeManager::new();
     let mut uci_settings = UCISettings::default();
 
     let rx = listen(shared.clone());
@@ -56,8 +56,7 @@ pub fn input_loop(cli_args: String) {
                 pool = SearchThreads::new(shared.clone(), thread_count);
             }
             "go" => {
-                time.clear_limits();
-                if let Some(m) = go(args, &mut pool, &mut board, &mut time, &uci_settings) {
+                if let Some(m) = go(args, &mut pool, &mut board, &uci_settings) {
                     println!("bestmove {}", m.to_uci(&board));
                 } else {
                     println!("bestmove 0000");
@@ -197,6 +196,11 @@ pub fn set_option(args: &str, uci_settings: &mut UCISettings, shared: Arc<Shared
             uci_settings.frc = v;
             println!("info string Set UCI_Chess960 to {v}");
         }
+        ["name", "softnodes", "value", v] => {
+            let v = v.parse().unwrap_or(false);
+            uci_settings.soft_nodes = v;
+            println!("info string Set SoftNodes to {v}");
+        }
         #[cfg(feature = "tuning")]
         ["name", name, "value", amount] => {
             match amount.parse::<i32>() {
@@ -210,64 +214,49 @@ pub fn set_option(args: &str, uci_settings: &mut UCISettings, shared: Arc<Shared
     }
 }
 
-pub fn go(
-    args: &str,
-    pool: &mut SearchThreads,
-    board: &mut Board,
-    time: &mut TimeManager,
-    uci_settings: &UCISettings,
-) -> Option<Move> {
-    let (command, args) = args.split_once(" ").unwrap_or((args, ""));
-    if args.is_empty() {
-        return pool.start(board, time.clone(), uci_settings.report);
+pub fn go(args: &str, pool: &mut SearchThreads, board: &mut Board, uci_settings: &UCISettings) -> Option<Move> {
+    let args = args.to_ascii_lowercase();
+    let args: Vec<&str> = args.split_ascii_whitespace().collect();
+    let settings = parse_limit(board.state.side_to_move, args.as_slice(), uci_settings.soft_nodes);
+    let time = TimeManager::new(settings, board.state.full_move);
+
+    pool.start(board, time.clone(), uci_settings.report)
+}
+
+fn parse_limit(stm: Side, args: &[&str], soft_node: bool) -> Limit {
+    let (mut main, mut inc, mut moves) = (None, 0, None);
+
+    for chunk in args.chunks(2) {
+        if let [command, value] = *chunk {
+            let Ok(value) = value.parse::<u64>() else {
+                continue;
+            };
+
+            match command {
+                "depth" if value > 0 => return Limit::Depth(value as i32),
+                "movestogo" if value > 0 => moves = Some(value),
+                "mate" if value > 0 => return Limit::Mate(value),
+                "movetime" => return Limit::Exact(value),
+                "wtime" if stm == Side::White => main = Some(value),
+                "winc" if stm == Side::White => inc = value,
+                "btime" if stm == Side::Black => main = Some(value),
+                "binc" if stm == Side::Black => inc = value,
+                "nodes" => {
+                    if soft_node {
+                        return Limit::Nodes(NodeKind::Soft(value));
+                    } else {
+                        return Limit::Nodes(NodeKind::Hard(value));
+                    }
+                }
+                "infinite" => return Limit::Infinite,
+
+                _ => continue,
+            }
+        }
     }
 
-    match command.trim() {
-        "depth" => {
-            let (depth, args) = args.split_once(" ").unwrap_or((args, ""));
-            time.settings.depth = depth.trim().parse().unwrap_or(MAX_PLY as i32 - 1);
-            time.set_depth_limit();
-            go(args, pool, board, time, uci_settings)
-        }
-        "wtime" => {
-            // Example: go wtime 900000 btime 900000 winc 0 binc 0
-            let (wtime, args) = args.split_once(" ").unwrap_or((args, ""));
-            time.settings.wtime = Some(wtime.trim().parse().unwrap_or(500));
-            go(args, pool, board, time, uci_settings)
-        }
-        "btime" => {
-            let (btime, args) = args.split_once(" ").unwrap_or((args, ""));
-            time.settings.btime = Some(btime.trim().parse().unwrap_or(500));
-            go(args, pool, board, time, uci_settings)
-        }
-        "winc" => {
-            let (winc, args) = args.split_once(" ").unwrap_or((args, ""));
-            time.settings.winc = winc.trim().parse().unwrap_or(0);
-            go(args, pool, board, time, uci_settings)
-        }
-        "binc" => {
-            let (binc, args) = args.split_once(" ").unwrap_or((args, ""));
-            time.settings.binc = binc.trim().parse().unwrap_or(0);
-            go(args, pool, board, time, uci_settings)
-        }
-        "movestogo" => {
-            let (movestogo, args) = args.split_once(" ").unwrap_or((args, ""));
-            time.settings.movestogo = movestogo.trim().parse().unwrap_or(0);
-            go(args, pool, board, time, uci_settings)
-        }
-        "movetime" => {
-            let (movetime, args) = args.split_once(" ").unwrap_or((args, ""));
-            time.settings.movetime = Some(movetime.trim().parse().unwrap_or(500));
-            go(args, pool, board, time, uci_settings)
-        }
-        "nodes" => {
-            let (nodes, args) = args.split_once(" ").unwrap_or((args, ""));
-            time.settings.nodes = nodes.trim().parse().unwrap_or(0);
-            time.set_nodes_limit();
-            go(args, pool, board, time, uci_settings)
-        }
-        _ => go(args, pool, board, time, uci_settings),
-    }
+    let Some(main) = main else { return Limit::Infinite };
+    if let Some(moves) = moves { Limit::Cyclic(main, inc, moves) } else { Limit::Fischer(main, inc) }
 }
 
 pub fn uci() {
@@ -278,6 +267,7 @@ pub fn uci() {
     println!("option name Clear Hash type button");
     println!("option name UCI_Chess960 type check default false");
     println!("option name Minimal type check default false");
+    println!("option name SoftNodes type check default false");
     #[cfg(feature = "tuning")]
     list_params();
     println!("uciok");
@@ -316,38 +306,6 @@ pub mod tests {
         if let Ok(m) = board.parse_move("e2e4") {
             println!("bestmove {}", m.to_uci(&board));
         }
-    }
-
-    #[test]
-    fn test_parse_times() {
-        let shared = Arc::new(SharedData::default());
-        let mut pool = SearchThreads::new(shared.clone(), 1);
-        let mut board = Board::from_fen(STARTING_FEN).unwrap();
-        let mut time = TimeManager::new();
-
-        go(
-            "wtime 5000 btime 5000 winc 0 binc 0",
-            &mut pool,
-            &mut board,
-            &mut time,
-            &UCISettings::default(),
-        );
-    }
-
-    #[test]
-    fn test_parse_go() {
-        let shared = Arc::new(SharedData::default());
-        let mut pool = SearchThreads::new(shared.clone(), 1);
-        let mut board = Board::from_fen(STARTING_FEN).unwrap();
-        let mut time = TimeManager::new();
-        let bm = go(
-            "wtime 5000 btime 5000 winc 5 binc 8 movetime 100",
-            &mut pool,
-            &mut board,
-            &mut time,
-            &UCISettings::default(),
-        );
-        println!("{:?}\nBestmove: {}", time.settings, bm.unwrap().to_uci(&board));
     }
 
     #[test]

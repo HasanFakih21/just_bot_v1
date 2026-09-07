@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use crate::board::Board;
 use crate::nnue::Network;
-use crate::search::time::{TimeManager, TimeSettings};
+use crate::search::time::{Limit, TimeManager};
 use crate::types::pv::PVTable;
 use crate::types::stack::Stack;
 use crate::types::{
@@ -119,7 +119,7 @@ impl SearchData {
             shared,
             pv: PVTable::new(),
             board: Board::from_fen(STARTING_FEN).unwrap(),
-            time: TimeManager::new(),
+            time: TimeManager::new(Limit::Infinite, 0),
             report: Report::None,
             stack: Stack::new(),
             root_moves: Vec::new(),
@@ -143,10 +143,6 @@ impl SearchData {
         &self.shared.history
     }
 
-    pub fn start_time(&mut self) {
-        self.time.reset_clock();
-    }
-
     pub fn nodes(&self) -> u64 {
         self.shared.node_count(self.id)
     }
@@ -157,10 +153,6 @@ impl SearchData {
 
     pub fn nodes_per_second(&self) -> usize {
         (self.shared.total_nodes_searched() as f32 / self.time.elapsed().as_secs_f32()) as usize
-    }
-
-    pub fn time_settings(&mut self) -> &mut TimeSettings {
-        &mut self.time.settings
     }
 
     pub fn update_conthistories(&mut self, m: Move, ply: isize, bonus: i32) {
