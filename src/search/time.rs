@@ -44,17 +44,29 @@ pub struct Limits {
 impl TimeManager {
     pub fn new(settings: TimeSettings, full_moves: usize) -> TimeManager {
         let mut limits = Limits::default();
-        if let Some(remaining_time) = settings.time {
+        if let Some(remaining_time) = settings.time
+            && settings.movestogo.is_none()
+        {
             let soft_scale = 0.06 - 0.05 * (-0.035 * full_moves as f64).exp();
             let hard_scale = 0.75;
             let max_time = remaining_time.saturating_sub(MOVE_OVERHEAD);
-            let moves = settings.movestogo.unwrap_or(1);
-            let s = (soft_scale * max_time as f64 + settings.inc as f64 * 0.75) as u64 / moves;
-            let h = (hard_scale * max_time as f64 + settings.inc as f64 * 0.75) as u64 / moves;
+
+            let s = (soft_scale * max_time as f64 + settings.inc as f64 * 0.75) as u64;
+            let h = (hard_scale * max_time as f64 + settings.inc as f64 * 0.75) as u64;
 
             limits.time = Some(TimeLimit {
                 soft: Duration::from_millis(s.min(max_time)),
                 hard: Duration::from_millis(h.min(max_time)),
+            })
+        } else if let Some(remaining_time) = settings.time
+            && let Some(moves) = settings.movestogo
+        {
+            let max_time = remaining_time.saturating_sub(MOVE_OVERHEAD);
+            let base = (max_time as f64 / moves as f64) + settings.inc as f64 * 0.75;
+
+            limits.time = Some(TimeLimit {
+                soft: Duration::from_millis(((1.0 * base) as u64).min(max_time + settings.inc)),
+                hard: Duration::from_millis(((5.0 * base) as u64).min(max_time + settings.inc)),
             })
         }
 
@@ -86,8 +98,8 @@ impl TimeManager {
         let exact = if let Some(limit) = &self.limits.exact { self.elapsed() > *limit } else { false };
         let nodes = if let Some(limit) = &self.limits.nodes {
             match limit {
-                Nodes::Hard(amount) => data.shared.total_nodes_searched() >= *amount,
-                Nodes::Soft(amount) => data.shared.total_nodes_searched() >= *amount,
+                Nodes::Hard(amount) => data.nodes() >= *amount,
+                Nodes::Soft(amount) => data.nodes() >= *amount,
             }
         } else {
             false
@@ -104,11 +116,7 @@ impl TimeManager {
         let check_time = data.nodes().is_multiple_of(2048);
         let time = if check_time && let Some(limit) = &self.limits.time { self.elapsed() > limit.hard } else { false };
         let exact = if check_time && let Some(limit) = &self.limits.exact { self.elapsed() > *limit } else { false };
-        let nodes = if let Some(Nodes::Hard(limit)) = &self.limits.nodes {
-            data.shared.total_nodes_searched() >= *limit
-        } else {
-            false
-        };
+        let nodes = if let Some(Nodes::Hard(limit)) = &self.limits.nodes { data.nodes() >= *limit } else { false };
 
         time || exact || nodes
     }

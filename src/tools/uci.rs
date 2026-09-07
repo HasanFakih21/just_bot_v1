@@ -233,12 +233,11 @@ fn parse_go(stm: Side, args: &[&str], soft_node: bool) -> TimeSettings {
 
             match command {
                 "depth" if value > 0 => settings.depth = Some(value as i32),
-                "movetime" if value > 0 => settings.movetime = Some(value),
                 "movestogo" if value > 0 => settings.movestogo = Some(value),
                 "mate" if value > 0 => settings.mate = Some(value),
-                "nodes" if value > 0 => {
-                    settings.nodes = if soft_node { Some(Nodes::Soft(value)) } else { Some(Nodes::Hard(value)) }
-                }
+
+                "movetime" => settings.movetime = Some(value),
+                "nodes" => settings.nodes = if soft_node { Some(Nodes::Soft(value)) } else { Some(Nodes::Hard(value)) },
 
                 "wtime" if stm == Side::White => settings.time = Some(value),
                 "winc" if stm == Side::White => settings.inc = value,
