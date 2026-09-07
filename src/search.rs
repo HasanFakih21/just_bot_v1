@@ -57,6 +57,9 @@ pub fn search_runner(data: &mut SearchData) {
         return;
     }
 
+    // Time Management
+    let mut move_stability = 0;
+
     // Iterative Deepening
     loop {
         data.stack = Stack::new();
@@ -99,6 +102,12 @@ pub fn search_runner(data: &mut SearchData) {
 
         data.root_moves.sort_by_key(|rm| std::cmp::Reverse(rm.score));
         data.root_moves.iter_mut().for_each(|rm| rm.previous_score = rm.score);
+        if data.best_move.as_ref().is_some_and(|rm| rm.m == data.root_moves[0].m) {
+            move_stability += 1;
+        } else {
+            move_stability = 0;
+        }
+
         data.best_move = Some(data.root_moves[0].clone());
         best_score = data.root_moves[0].score;
 
@@ -120,8 +129,9 @@ pub fn search_runner(data: &mut SearchData) {
 
             let diff = (data.prev_score - best_score) as f32;
             let score_trend = (0.75 + 0.045 * diff).clamp(0.7, 1.5);
+            let m_stability = (1.2000 - 0.0500 * move_stability as f32).max(0.8500);
 
-            node_tm * score_trend
+            node_tm * score_trend * m_stability
         };
 
         if data.id == 0 && data.time.soft_limit(data, multiplier) {
