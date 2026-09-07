@@ -78,6 +78,8 @@ pub fn search_runner(data: &mut SearchData) {
             break;
         }
 
+        data.root_moves.sort_by_key(|rm| std::cmp::Reverse(rm.score));
+
         // Aspiration Window
         if score <= alpha {
             // Failed Low
@@ -97,7 +99,6 @@ pub fn search_runner(data: &mut SearchData) {
         data.sel_depth = 0;
         depth += 1;
 
-        data.root_moves.sort_by_key(|rm| std::cmp::Reverse(rm.score));
         data.root_moves.iter_mut().for_each(|rm| rm.previous_score = rm.score);
         data.best_move = Some(data.root_moves[0].clone());
         best_score = data.root_moves[0].score;
@@ -206,7 +207,7 @@ pub fn search<Node: NodeType>(
     let tt_score = tt_entry.as_ref().map(|e| e.score()).filter(|s| *s != Score::NONE);
     let tt_pv = tt_entry.as_ref().map(|e| e.is_pv()).unwrap_or(false);
     let tt_depth = tt_entry.as_ref().map(|e| e.depth());
-    let tt_move = if Node::ROOT && data.root_depth > 3 {
+    let tt_move = if Node::ROOT {
         Some(data.root_moves[0].m)
     } else {
         tt_entry.as_ref().map(|e| e.best_move()).filter(|m| !m.is_null())
