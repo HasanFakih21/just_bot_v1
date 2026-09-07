@@ -2,76 +2,70 @@ use std::time::{Duration, Instant};
 
 use crate::{search::data::SearchData, types::MOVE_OVERHEAD};
 
-// Some settings don't do anything yet
-#[derive(Debug, Clone, Default)]
-pub struct TimeSettings {
-    pub time: Option<u64>,
-    pub inc: u64,
-    pub movestogo: Option<u64>,
-    pub depth: Option<i32>,
-    pub nodes: Option<Nodes>,
-    pub mate: Option<u64>,
-    pub movetime: Option<u64>,
-}
-
 #[derive(Debug, Clone)]
 pub struct TimeManager {
     pub clock: Instant,
-    pub limits: Limits,
+    pub limit: Limit,
+    soft_bound: Option<Duration>,
+    hard_bound: Option<Duration>,
 }
 
 #[derive(Debug, Clone)]
-pub enum Nodes {
+pub enum NodeKind {
     Soft(u64),
     Hard(u64),
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct Limits {
-    pub depth: Option<i32>,
-    exact: bool,
-    soft_bound: Option<Duration>,
-    hard_bound: Option<Duration>,
-    nodes: Option<Nodes>,
-    mate: Option<u64>,
+#[derive(Debug, Clone)]
+pub enum Limit {
+    Infinite,
+    Exact(u64),
+    Nodes(NodeKind),
+    Mate(u64),
+    Fischer(u64, u64),
+    Cyclic(u64, u64, u64),
+    Depth(i32),
 }
 
 impl TimeManager {
-    pub fn new(settings: TimeSettings, full_moves: usize) -> TimeManager {
-        let mut limits = Limits::default();
-        if let Some(remaining_time) = settings.time
-            && settings.movestogo.is_none()
-        {
-            let soft_scale = 0.06 - 0.05 * (-0.035 * full_moves as f64).exp();
-            let hard_scale = 0.75;
-            let max_time = remaining_time.saturating_sub(MOVE_OVERHEAD);
+    pub fn new(limit: Limit, full_moves: usize) -> TimeManager {
+        let soft_bound;
+        let hard_bound;
 
-            let soft = (soft_scale * max_time as f64 + settings.inc as f64 * 0.75) as u64;
-            let hard = (hard_scale * max_time as f64 + settings.inc as f64 * 0.75) as u64;
+        match limit {
+            Limit::Fischer(main, inc) => {
+                let soft_scale = 0.06 - 0.05 * (-0.035 * full_moves as f64).exp();
+                let hard_scale = 0.75;
+                let max_time = main.saturating_sub(MOVE_OVERHEAD);
 
-            limits.soft_bound = Some(Duration::from_millis(soft.min(max_time)));
-            limits.hard_bound = Some(Duration::from_millis(hard.min(max_time)));
-        } else if let Some(remaining_time) = settings.time
-            && let Some(moves) = settings.movestogo
-        {
-            let max_time = remaining_time.saturating_sub(MOVE_OVERHEAD);
-            let base = (max_time as f64 / moves as f64) + settings.inc as f64 * 0.75;
+                let soft = (soft_scale * max_time as f64 + inc as f64 * 0.75) as u64;
+                let hard = (hard_scale * max_time as f64 + inc as f64 * 0.75) as u64;
 
-            limits.soft_bound = Some(Duration::from_millis(((1.0 * base) as u64).min(max_time)));
-            limits.hard_bound = Some(Duration::from_millis(((5.0 * base) as u64).min(max_time)));
-        } else if let Some(movetime) = settings.movetime {
-            limits.soft_bound = Some(Duration::from_millis(movetime.saturating_sub(MOVE_OVERHEAD)));
-            limits.hard_bound = Some(Duration::from_millis(movetime.saturating_sub(MOVE_OVERHEAD)));
-            limits.exact = true;
+                soft_bound = Some(Duration::from_millis(soft.min(max_time)));
+                hard_bound = Some(Duration::from_millis(hard.min(max_time)));
+            }
+            Limit::Cyclic(main, inc, moves) => {
+                let max_time = main.saturating_sub(MOVE_OVERHEAD);
+                let base = (max_time as f64 / moves as f64) + inc as f64 * 0.75;
+
+                soft_bound = Some(Duration::from_millis(((1.0 * base) as u64).min(max_time)));
+                hard_bound = Some(Duration::from_millis(((5.0 * base) as u64).min(max_time)));
+            }
+            Limit::Exact(main) => {
+                soft_bound = Some(Duration::from_millis(main.saturating_sub(MOVE_OVERHEAD)));
+                hard_bound = Some(Duration::from_millis(main.saturating_sub(MOVE_OVERHEAD)));
+            }
+            _ => {
+                soft_bound = None;
+                hard_bound = None;
+            }
         }
 
-        limits.nodes = settings.nodes;
-        limits.depth = settings.depth;
-        limits.mate = settings.mate;
-
         TimeManager {
+            hard_bound,
+            soft_bound,
             clock: Instant::now(),
-            limits,
+            limit,
         }
     }
 
@@ -84,16 +78,13 @@ impl TimeManager {
     }
 
     pub fn soft_limit(&self, data: &SearchData, multiplier: impl Fn() -> f32) -> bool {
-        if self.limits.exact
-            && let Some(limit) = self.limits.soft_bound
-        {
-            self.elapsed() >= Duration::from_secs_f32(limit.as_secs_f32())
-        } else if let Some(limit) = self.limits.soft_bound {
-            self.elapsed() >= Duration::from_secs_f32(limit.as_secs_f32() * multiplier())
-        } else if let Some(Nodes::Soft(limit) | Nodes::Hard(limit)) = &self.limits.nodes {
-            data.nodes() >= *limit
-        } else {
-            false
+        match self.limit {
+            Limit::Fischer(_, _) | Limit::Cyclic(_, _, _) if let Some(limit) = self.soft_bound => {
+                self.elapsed() >= Duration::from_secs_f32(limit.as_secs_f32() * multiplier())
+            }
+            Limit::Exact(_) if let Some(limit) = self.soft_bound => self.elapsed() >= limit,
+            Limit::Nodes(NodeKind::Soft(limit) | NodeKind::Hard(limit)) => data.nodes() >= limit,
+            _ => false,
         }
     }
 
@@ -102,14 +93,15 @@ impl TimeManager {
             return false;
         }
 
-        if data.nodes().is_multiple_of(2048)
-            && let Some(limit) = self.limits.hard_bound
-        {
-            self.elapsed() >= limit
-        } else if let Some(Nodes::Hard(limit)) = &self.limits.nodes {
-            data.nodes() >= *limit
-        } else {
-            false
+        match self.limit {
+            Limit::Fischer(_, _) | Limit::Cyclic(_, _, _) | Limit::Exact(_)
+                if let Some(limit) = self.hard_bound
+                    && data.nodes().is_multiple_of(2048) =>
+            {
+                self.elapsed() >= limit
+            }
+            Limit::Nodes(NodeKind::Hard(limit)) => data.nodes() >= limit,
+            _ => false,
         }
     }
 }

@@ -1,6 +1,7 @@
 use crate::search::{
     data::{Report, SearchData, Status},
     movepicker::MovePicker,
+    time::Limit,
 };
 use crate::types::*;
 use crate::types::{stack::Stack, stackvec::StackVec};
@@ -61,7 +62,12 @@ pub fn search_runner(data: &mut SearchData) {
         data.stack = Stack::new();
         data.root_depth = depth;
 
-        if data.id == 0 && (data.time.hard_limit(data) || data.time.limits.depth.is_some_and(|limit| depth > limit)) {
+        if data.id == 0
+            && (match data.time.limit {
+                Limit::Depth(limit) => depth > limit,
+                _ => data.time.hard_limit(data),
+            })
+        {
             data.shared.status.stop();
             break;
         }
@@ -98,6 +104,14 @@ pub fn search_runner(data: &mut SearchData) {
 
         if data.report == Report::Full {
             data.print_uci_info();
+        }
+
+        if data.id == 0
+            && let Limit::Mate(moves) = data.time.limit
+            && Score::MATE - best_score.abs() <= moves as i32 * 2
+        {
+            data.shared.status.stop();
+            break;
         }
 
         let multiplier = || {

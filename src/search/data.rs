@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use crate::board::Board;
 use crate::nnue::Network;
-use crate::search::time::{TimeManager, TimeSettings};
+use crate::search::time::{Limit, TimeManager};
 use crate::types::pv::PVTable;
 use crate::types::stack::Stack;
 use crate::types::{
@@ -119,7 +119,7 @@ impl SearchData {
             shared,
             pv: PVTable::new(),
             board: Board::from_fen(STARTING_FEN).unwrap(),
-            time: TimeManager::new(TimeSettings::default(), 0),
+            time: TimeManager::new(Limit::Infinite, 0),
             report: Report::None,
             stack: Stack::new(),
             root_moves: Vec::new(),

@@ -5,7 +5,7 @@ use std::thread;
 use crate::board::Board;
 use crate::board::movegen::MoveGenKind;
 use crate::search::data::{Report, SharedData};
-use crate::search::time::{Nodes, TimeManager, TimeSettings};
+use crate::search::time::{Limit, NodeKind, TimeManager};
 use crate::threads::SearchThreads;
 use crate::tools::bench::bench;
 #[cfg(feature = "datagen")]
@@ -217,14 +217,15 @@ pub fn set_option(args: &str, uci_settings: &mut UCISettings, shared: Arc<Shared
 pub fn go(args: &str, pool: &mut SearchThreads, board: &mut Board, uci_settings: &UCISettings) -> Option<Move> {
     let args = args.to_ascii_lowercase();
     let args: Vec<&str> = args.split_ascii_whitespace().collect();
-    let settings = parse_go(board.state.side_to_move, args.as_slice(), uci_settings.soft_nodes);
+    let settings = parse_limit(board.state.side_to_move, args.as_slice(), uci_settings.soft_nodes);
     let time = TimeManager::new(settings, board.state.full_move);
 
     pool.start(board, time.clone(), uci_settings.report)
 }
 
-fn parse_go(stm: Side, args: &[&str], soft_node: bool) -> TimeSettings {
-    let mut settings = TimeSettings::default();
+fn parse_limit(stm: Side, args: &[&str], soft_node: bool) -> Limit {
+    let (mut main, mut inc, mut moves) = (None, 0, None);
+
     for chunk in args.chunks(2) {
         if let [command, value] = *chunk {
             let Ok(value) = value.parse::<u64>() else {
@@ -232,24 +233,30 @@ fn parse_go(stm: Side, args: &[&str], soft_node: bool) -> TimeSettings {
             };
 
             match command {
-                "depth" if value > 0 => settings.depth = Some(value as i32),
-                "movestogo" if value > 0 => settings.movestogo = Some(value),
-                "mate" if value > 0 => settings.mate = Some(value),
-
-                "movetime" => settings.movetime = Some(value),
-                "nodes" => settings.nodes = if soft_node { Some(Nodes::Soft(value)) } else { Some(Nodes::Hard(value)) },
-
-                "wtime" if stm == Side::White => settings.time = Some(value),
-                "winc" if stm == Side::White => settings.inc = value,
-                "btime" if stm == Side::Black => settings.time = Some(value),
-                "binc" if stm == Side::Black => settings.inc = value,
+                "depth" if value > 0 => return Limit::Depth(value as i32),
+                "movestogo" if value > 0 => moves = Some(value),
+                "mate" if value > 0 => return Limit::Mate(value),
+                "movetime" => return Limit::Exact(value),
+                "wtime" if stm == Side::White => main = Some(value),
+                "winc" if stm == Side::White => inc = value,
+                "btime" if stm == Side::Black => main = Some(value),
+                "binc" if stm == Side::Black => inc = value,
+                "nodes" => {
+                    if soft_node {
+                        return Limit::Nodes(NodeKind::Soft(value));
+                    } else {
+                        return Limit::Nodes(NodeKind::Hard(value));
+                    }
+                }
+                "infinite" => return Limit::Infinite,
 
                 _ => continue,
             }
         }
     }
 
-    settings
+    let Some(main) = main else { return Limit::Infinite };
+    if let Some(moves) = moves { Limit::Cyclic(main, inc, moves) } else { Limit::Fischer(main, inc) }
 }
 
 pub fn uci() {
