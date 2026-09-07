@@ -225,7 +225,9 @@ pub fn search<Node: NodeType>(
             && tt_move.kind().is_quiet()
         {
             let bonus = (206 * depth - 50).min(1201);
+            let cont_bonus = (100 * depth - 50).min(1200);
             data.quiet_history.update(data.board.threats(), stm, tt_move, bonus);
+            data.update_conthistories(tt_move, ply, cont_bonus);
         }
 
         return tt_score;
