@@ -206,7 +206,7 @@ pub fn search<Node: NodeType>(
     let tt_score = tt_entry.as_ref().map(|e| e.score()).filter(|s| *s != Score::NONE);
     let tt_pv = tt_entry.as_ref().map(|e| e.is_pv()).unwrap_or(false);
     let tt_depth = tt_entry.as_ref().map(|e| e.depth());
-    let tt_move = if Node::ROOT {
+    let tt_move = if Node::ROOT && data.root_depth > 3 {
         Some(data.root_moves[0].m)
     } else {
         tt_entry.as_ref().map(|e| e.best_move()).filter(|m| !m.is_null())
