@@ -51,12 +51,12 @@ impl TimeManager {
             let hard_scale = 0.75;
             let max_time = remaining_time.saturating_sub(MOVE_OVERHEAD);
 
-            let s = (soft_scale * max_time as f64 + settings.inc as f64 * 0.75) as u64;
-            let h = (hard_scale * max_time as f64 + settings.inc as f64 * 0.75) as u64;
+            let soft = (soft_scale * max_time as f64 + settings.inc as f64 * 0.75) as u64;
+            let hard = (hard_scale * max_time as f64 + settings.inc as f64 * 0.75) as u64;
 
             limits.time = Some(TimeLimit {
-                soft: Duration::from_millis(s.min(max_time)),
-                hard: Duration::from_millis(h.min(max_time)),
+                soft: Duration::from_millis(soft.min(max_time)),
+                hard: Duration::from_millis(hard.min(max_time)),
             })
         } else if let Some(remaining_time) = settings.time
             && let Some(moves) = settings.movestogo
@@ -65,8 +65,8 @@ impl TimeManager {
             let base = (max_time as f64 / moves as f64) + settings.inc as f64 * 0.75;
 
             limits.time = Some(TimeLimit {
-                soft: Duration::from_millis(((1.0 * base) as u64).min(max_time + settings.inc)),
-                hard: Duration::from_millis(((5.0 * base) as u64).min(max_time + settings.inc)),
+                soft: Duration::from_millis(((1.0 * base) as u64).min(max_time)),
+                hard: Duration::from_millis(((5.0 * base) as u64).min(max_time)),
             })
         }
 
