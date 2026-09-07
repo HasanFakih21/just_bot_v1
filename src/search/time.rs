@@ -96,14 +96,8 @@ impl TimeManager {
         };
 
         let exact = if let Some(limit) = &self.limits.exact { self.elapsed() > *limit } else { false };
-        let nodes = if let Some(limit) = &self.limits.nodes {
-            match limit {
-                Nodes::Hard(amount) => data.nodes() >= *amount,
-                Nodes::Soft(amount) => data.nodes() >= *amount,
-            }
-        } else {
-            false
-        };
+        let nodes =
+            matches!(&self.limits.nodes, Some(Nodes::Soft(limit) | Nodes::Hard(limit)) if data.nodes() >= *limit);
 
         time || exact || nodes
     }
