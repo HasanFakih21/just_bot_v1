@@ -1,6 +1,7 @@
 use crate::search::{
     data::{Report, SearchData, Status},
     movepicker::MovePicker,
+    time::Nodes,
 };
 use crate::types::*;
 use crate::types::{stack::Stack, stackvec::StackVec};
@@ -61,7 +62,16 @@ pub fn search_runner(data: &mut SearchData) {
         data.stack = Stack::new();
         data.root_depth = depth;
 
-        if data.id == 0 && (data.time.hard_limit(data) || data.time.limits.depth.is_some_and(|limit| depth > limit)) {
+        if data.id == 0
+            && (data.time.hard_limit(data)
+                || data.time.limits.depth.is_some_and(|limit| depth > limit)
+                || data
+                    .time
+                    .limits
+                    .nodes
+                    .as_ref()
+                    .is_some_and(|limit| matches!(limit, Nodes::Hard(amount) if data.nodes() >= *amount)))
+        {
             data.shared.status.stop();
             break;
         }
@@ -179,7 +189,15 @@ pub fn search<Node: NodeType>(
     }
 
     // Check for Time Outs
-    if data.id == 0 && data.time.hard_limit(data) {
+    if data.id == 0
+        && (data.time.hard_limit(data)
+            || data
+                .time
+                .limits
+                .nodes
+                .as_ref()
+                .is_some_and(|limit| matches!(limit, Nodes::Hard(amount) if data.nodes() >= *amount)))
+    {
         data.shared.status.stop();
         return Score::TIMEOUT;
     }
@@ -657,7 +675,15 @@ pub fn quiesce<Node: NodeType>(data: &mut SearchData, mut alpha: i32, beta: i32,
         return Score::DRAW;
     }
 
-    if data.id == 0 && data.time.hard_limit(data) {
+    if data.id == 0
+        && (data.time.hard_limit(data)
+            || data
+                .time
+                .limits
+                .nodes
+                .as_ref()
+                .is_some_and(|limit| matches!(limit, Nodes::Hard(amount) if data.nodes() >= *amount)))
+    {
         data.shared.status.stop();
         return Score::TIMEOUT;
     }

@@ -35,9 +35,9 @@ struct TimeLimit {
 #[derive(Debug, Clone, Default)]
 pub struct Limits {
     pub depth: Option<i32>,
+    pub nodes: Option<Nodes>,
     time: Option<TimeLimit>,
     exact: Option<Duration>,
-    nodes: Option<Nodes>,
     mate: Option<u64>,
 }
 
@@ -107,15 +107,14 @@ impl TimeManager {
     }
 
     pub fn hard_limit(&self, data: &SearchData) -> bool {
-        if data.id != 0 || data.root_depth <= 1 {
+        if data.id != 0 || data.root_depth <= 1 || !data.nodes().is_multiple_of(2048) {
             return false;
         }
 
-        let check_time = data.nodes().is_multiple_of(2048);
-        let time = if check_time && let Some(limit) = &self.limits.time { self.elapsed() > limit.hard } else { false };
-        let exact = if check_time && let Some(limit) = &self.limits.exact { self.elapsed() > *limit } else { false };
-        let nodes = if let Some(Nodes::Hard(limit)) = &self.limits.nodes { data.nodes() >= *limit } else { false };
-
-        time || exact || nodes
+        self.limits
+            .time
+            .as_ref()
+            .is_some_and(|limit| self.elapsed() > limit.hard)
+            || self.limits.exact.is_some_and(|limit| self.elapsed() > limit)
     }
 }
