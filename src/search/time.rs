@@ -101,6 +101,7 @@ impl TimeManager {
                 self.elapsed() >= limit
             }
             Limit::Nodes(NodeKind::Hard(limit)) => data.nodes() >= limit,
+            Limit::Nodes(NodeKind::Soft(_)) => data.nodes() >= 800_000,
             _ => false,
         }
     }
