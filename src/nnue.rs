@@ -34,17 +34,17 @@ const QB: i16 = 64;
 
 #[rustfmt::skip]
 const BUCKET_LAYOUT: [usize; 32] = [
-    0, 0, 0, 0, 
-    0, 0, 0, 0,
+    0, 0, 1, 1, 
+    1, 1, 1, 1,
     1, 1, 1, 1, 
-    1, 1, 1, 1,
-    1, 1, 1, 1,
+    2, 2, 2, 2,
+    2, 2, 2, 2,
     2, 2, 2, 2, 
     2, 2, 2, 2,
-    2, 2, 2, 2,
+    3, 3, 3, 3,
 ];
 
-const NUM_INPUT_BUCKETS: usize = 3;
+const NUM_INPUT_BUCKETS: usize = 4;
 
 pub static MODEL: Parameters = unsafe { std::mem::transmute(*include_bytes!(env!("MODEL"))) };
 
