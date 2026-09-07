@@ -196,6 +196,11 @@ pub fn set_option(args: &str, uci_settings: &mut UCISettings, shared: Arc<Shared
             uci_settings.frc = v;
             println!("info string Set UCI_Chess960 to {v}");
         }
+        ["name", "softnodes", "value", v] => {
+            let v = v.parse().unwrap_or(false);
+            uci_settings.soft_nodes = v;
+            println!("info string Set SoftNodes to {v}");
+        }
         #[cfg(feature = "tuning")]
         ["name", name, "value", amount] => {
             match amount.parse::<i32>() {
@@ -256,6 +261,7 @@ pub fn uci() {
     println!("option name Clear Hash type button");
     println!("option name UCI_Chess960 type check default false");
     println!("option name Minimal type check default false");
+    println!("option name SoftNodes type check default false");
     #[cfg(feature = "tuning")]
     list_params();
     println!("uciok");
