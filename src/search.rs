@@ -452,7 +452,6 @@ pub fn search<Node: NodeType>(
                 && depth < 8
                 && static_eval + 93 * depth + 142 + 51 * history / 1024 <= alpha
             {
-                skip_quiets = true;
                 continue;
             }
 
