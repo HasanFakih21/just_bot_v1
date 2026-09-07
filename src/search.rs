@@ -37,7 +37,6 @@ impl NodeType for Root {
 }
 
 pub fn search_runner(data: &mut SearchData) {
-    data.start_time();
     data.network.full_refresh(&data.board);
     data.pv.clear(0);
 
@@ -61,14 +60,7 @@ pub fn search_runner(data: &mut SearchData) {
         data.stack = Stack::new();
         data.root_depth = depth;
 
-        if (data.time.hard_limit(data)
-            || data
-                .time
-                .node_limit()
-                .is_some_and(|node_limit| data.nodes() >= node_limit)
-            || depth > data.time.depth_limit())
-            && data.id == 0
-        {
+        if data.id == 0 && (data.time.hard_limit(data) || data.time.limits.depth.is_some_and(|limit| depth > limit)) {
             data.shared.status.stop();
             break;
         }
@@ -117,7 +109,7 @@ pub fn search_runner(data: &mut SearchData) {
             node_tm * score_trend
         };
 
-        if data.time.soft_limit(multiplier) && data.id == 0 {
+        if data.id == 0 && data.time.soft_limit(data, multiplier) {
             data.shared.status.stop();
             break;
         }
@@ -127,7 +119,7 @@ pub fn search_runner(data: &mut SearchData) {
         beta = (score + delta).min(Score::INFINITY);
     }
 
-    if data.report == Report::Minimal {
+    if matches!(data.report, Report::Minimal | Report::Full) {
         data.print_uci_info();
     }
 
@@ -186,13 +178,7 @@ pub fn search<Node: NodeType>(
     }
 
     // Check for Time Outs
-    if (data.time.hard_limit(data)
-        || data
-            .time
-            .node_limit()
-            .is_some_and(|node_limit| data.nodes() >= node_limit))
-        && data.id == 0
-    {
+    if data.id == 0 && data.time.hard_limit(data) {
         data.shared.status.stop();
         return Score::TIMEOUT;
     }
@@ -670,13 +656,7 @@ pub fn quiesce<Node: NodeType>(data: &mut SearchData, mut alpha: i32, beta: i32,
         return Score::DRAW;
     }
 
-    if (data.time.hard_limit(data)
-        || data
-            .time
-            .node_limit()
-            .is_some_and(|node_limit| data.nodes() >= node_limit))
-        && data.id == 0
-    {
+    if data.id == 0 && data.time.hard_limit(data) {
         data.shared.status.stop();
         return Score::TIMEOUT;
     }

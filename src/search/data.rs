@@ -119,7 +119,7 @@ impl SearchData {
             shared,
             pv: PVTable::new(),
             board: Board::from_fen(STARTING_FEN).unwrap(),
-            time: TimeManager::new(),
+            time: TimeManager::new(TimeSettings::default(), 0),
             report: Report::None,
             stack: Stack::new(),
             root_moves: Vec::new(),
@@ -143,10 +143,6 @@ impl SearchData {
         &self.shared.history
     }
 
-    pub fn start_time(&mut self) {
-        self.time.reset_clock();
-    }
-
     pub fn nodes(&self) -> u64 {
         self.shared.node_count(self.id)
     }
@@ -157,10 +153,6 @@ impl SearchData {
 
     pub fn nodes_per_second(&self) -> usize {
         (self.shared.total_nodes_searched() as f32 / self.time.elapsed().as_secs_f32()) as usize
-    }
-
-    pub fn time_settings(&mut self) -> &mut TimeSettings {
-        &mut self.time.settings
     }
 
     pub fn update_conthistories(&mut self, m: Move, ply: isize, bonus: i32) {

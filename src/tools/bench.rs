@@ -4,7 +4,7 @@ use crate::{
     board::Board,
     search::{
         data::{Report, SharedData},
-        time::TimeManager,
+        time::{TimeManager, TimeSettings},
     },
     threads::SearchThreads,
 };
@@ -69,9 +69,13 @@ pub fn bench() -> (u64, u64) {
     let mut total_node_count = 0;
     for fen in positions {
         let board = Board::from_fen(fen).unwrap();
-        let mut time_manager = TimeManager::new();
-        time_manager.settings.depth = 12;
-        time_manager.set_depth_limit();
+        let time_manager = TimeManager::new(
+            TimeSettings {
+                depth: Some(12),
+                ..Default::default()
+            },
+            0,
+        );
 
         pool.start(&board, time_manager, Report::None);
         total_node_count += shared.total_nodes_searched();

@@ -37,10 +37,8 @@ impl SearchThreads {
         SearchThreads { workers, shared }
     }
 
-    pub fn start(&mut self, board: &Board, mut time: TimeManager, report: Report) -> Option<Move> {
+    pub fn start(&mut self, board: &Board, time: TimeManager, report: Report) -> Option<Move> {
         debug_assert!(!self.workers.is_empty());
-
-        time.set_time_limits(board.state.side_to_move, board.state.full_move);
         self.shared.tt.increase_age();
         self.shared.reset_all_nodes();
         self.shared.status.run();
@@ -240,36 +238,4 @@ struct Worker {
     handle: JoinHandle<()>,
     comm: Sender<Command>,
     result: Receiver<Response>,
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use crate::{
-        board::Board,
-        search::{
-            data::{Report, SharedData},
-            time::TimeManager,
-        },
-        threads::SearchThreads,
-        types::STARTING_FEN,
-    };
-
-    #[test]
-    fn test_multithread() {
-        let a = std::thread::available_parallelism().unwrap().get();
-        println!("{a}");
-
-        let shared = Arc::new(SharedData::default());
-        let mut time = TimeManager::new();
-        time.settings.wtime = Some(8080);
-        time.settings.winc = 80;
-
-        let board = Board::from_fen(STARTING_FEN).unwrap();
-
-        let mut pool = SearchThreads::new(shared.clone(), 3);
-        let m = pool.start(&board, time, Report::None).unwrap();
-        println!("{}", m.to_uci(&board));
-    }
 }
