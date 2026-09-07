@@ -84,6 +84,10 @@ impl TimeManager {
         }
     }
 
+    pub fn start_clock(&mut self) {
+        self.clock = Instant::now();
+    }
+
     pub fn elapsed(&self) -> Duration {
         self.clock.elapsed()
     }

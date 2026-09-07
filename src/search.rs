@@ -39,6 +39,7 @@ impl NodeType for Root {
 pub fn search_runner(data: &mut SearchData) {
     data.network.full_refresh(&data.board);
     data.pv.clear(0);
+    data.time.start_clock();
 
     let mut delta = 24;
     let mut alpha = -Score::INFINITY;
