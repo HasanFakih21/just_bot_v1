@@ -373,8 +373,11 @@ pub fn search<Node: NodeType>(
         && !is_decisive(tt_score)
         && tt_bound != Bound::Upper
     {
+        let mut beta_mult = 485;
+        beta_mult -= 550 * Node::PV as i32;
+        beta_mult += 485 * tt_pv as i32;
+        let singular_beta = (1024 * tt_score - depth * beta_mult) / 1024;
         let singular_depth = (depth - 1) / 2;
-        let singular_beta = tt_score - (depth + depth);
 
         data.stack[ply].excluded = tt_move;
         data.stack[ply].m = Move::NONE;
