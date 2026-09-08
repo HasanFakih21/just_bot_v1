@@ -111,7 +111,9 @@ impl Cluster {
         let matches = zeros.wrapping_sub(BITS) & !zeros & (BITS << 15);
 
         let index = (matches.trailing_zeros() / 16) as usize;
-        (index < NUM_ENTRIES_PER_CLUSTER).then_some(index)
+        (index < NUM_ENTRIES_PER_CLUSTER
+            && (self.entries[index].bound() != Bound::None || self.entries[index].score() == Score::NONE))
+            .then_some(index)
     }
 
     /// Gets the 16 bit key corresponding to the given index
@@ -178,7 +180,7 @@ impl TranspositionTable {
         let key = hash as u16;
         let tt_age = self.age();
 
-        let replacement_index = cluster.lookup_key(key).unwrap_or({
+        let replacement_index = cluster.lookup_key(key).unwrap_or_else(|| {
             let mut index = 0;
             let mut worst_quality = i32::MAX;
 
