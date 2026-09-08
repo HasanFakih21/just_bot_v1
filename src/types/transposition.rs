@@ -108,10 +108,10 @@ pub struct Cluster {
 }
 
 impl Cluster {
-    pub fn lookup_key(&self, key: u16) -> Option<&Entry> {
+    pub fn lookup_key(&self, key: u16) -> Option<usize> {
         self.entries
             .iter()
-            .find(|e| e.key() == key && (e.bound() != Bound::None || e.score() == Score::NONE))
+            .position(|e| e.key() == key && (e.bound() != Bound::None || e.score() == Score::NONE))
     }
 }
 
@@ -164,12 +164,12 @@ impl TranspositionTable {
         let key = hash as u16;
         let tt_age = self.age();
 
-        let replacement_index = {
+        let replacement_index = cluster.lookup_key(key).unwrap_or_else(|| {
             let mut index = 0;
             let mut worst_quality = i32::MAX;
 
             for (i, entry) in cluster.entries.iter().enumerate() {
-                if entry.key() == key || entry.flags.bound() == Bound::None {
+                if entry.flags.bound() == Bound::None {
                     index = i;
                     break;
                 }
@@ -182,7 +182,7 @@ impl TranspositionTable {
             }
 
             index
-        };
+        });
 
         let entry = &mut cluster.entries[replacement_index];
         let same_key = key == entry.key();
@@ -220,14 +220,16 @@ impl TranspositionTable {
         debug_assert!(index < self.len());
 
         let cluster = unsafe { &*self.ptr().add(index) };
-        let entry = cluster.lookup_key(hash as u16);
-        entry.map(|e| Entry {
-            key: e.key,
-            best_move: e.best_move,
-            score: from_tt(e.score, ply),
-            eval: e.eval,
-            depth: e.depth,
-            flags: e.flags,
+        let index = cluster.lookup_key(hash as u16)?;
+        let entry = &cluster.entries[index];
+
+        Some(Entry {
+            key: entry.key,
+            best_move: entry.best_move,
+            score: from_tt(entry.score, ply),
+            eval: entry.eval,
+            depth: entry.depth,
+            flags: entry.flags,
         })
     }
 
