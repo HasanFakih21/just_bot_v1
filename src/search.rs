@@ -410,6 +410,7 @@ pub fn search<Node: NodeType>(
     let mut quiets_searched = StackVec::<Move, 32>::new();
     let mut noisies_searched = StackVec::<Move, 32>::new();
     let mut skip_quiets = false;
+    let mut alpha_raises = 0;
 
     while let Some(m) = move_picker.next(data, skip_quiets, ply) {
         if m == data.stack[ply].excluded {
@@ -485,6 +486,7 @@ pub fn search<Node: NodeType>(
             r += 215 * !improving as i32;
             r += 454 * (tt_score.is_some_and(|s| s <= alpha)) as i32;
             r += 303 * (tt_depth.is_some_and(|d| d < depth)) as i32;
+            r += 600 * alpha_raises;
             r -= 439 * history / 4096;
 
             let reduction = r / 1024;
@@ -560,6 +562,7 @@ pub fn search<Node: NodeType>(
                     break;
                 }
 
+                alpha_raises += 1;
                 alpha = score;
             }
         }
