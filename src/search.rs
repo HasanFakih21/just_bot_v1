@@ -482,10 +482,10 @@ pub fn search<Node: NodeType>(
             r += 1200 * cutnode as i32;
             r -= 1200 * tt_was_pv as i32;
             r -= 800 * is_direct_check as i32;
-            r += 215 * !improving as i32;
             r += 454 * (tt_score.is_some_and(|s| s <= alpha)) as i32;
             r += 303 * (tt_depth.is_some_and(|d| d < depth)) as i32;
             r -= 439 * history / 4096;
+            r -= (215 * improvement / 128).clamp(-215, 1200);
 
             let reduction = r / 1024;
             let reduced_depth = (new_depth - reduction).max(1) + Node::PV as i32;
