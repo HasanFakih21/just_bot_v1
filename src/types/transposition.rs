@@ -49,7 +49,6 @@ impl Flags {
 
 #[derive(Debug, Clone)]
 pub struct Entry {
-    key: u16,        // 2 bytes
     best_move: Move, // 2 bytes
     score: i16,      // 2 bytes
     eval: i16,       // 2 bytes
@@ -58,9 +57,8 @@ pub struct Entry {
 }
 
 impl Entry {
-    pub fn new(key: u16, best_move: Move, score: i16, eval: i16, depth: u8, flags: Flags) -> Self {
+    pub fn new(best_move: Move, score: i16, eval: i16, depth: u8, flags: Flags) -> Self {
         Entry {
-            key,
             best_move,
             score,
             eval,
@@ -71,10 +69,6 @@ impl Entry {
 
     pub const fn relative_age(&self, tt_age: u8) -> i32 {
         ((32 + tt_age - self.flags.age()) & MAX_AGE) as i32
-    }
-
-    pub fn key(&self) -> u16 {
-        self.key
     }
 
     pub fn bound(&self) -> Bound {
@@ -105,13 +99,35 @@ impl Entry {
 #[repr(align(32))]
 pub struct Cluster {
     entries: [Entry; NUM_ENTRIES_PER_CLUSTER],
+    keys: u64,
 }
 
 impl Cluster {
-    pub fn lookup_key(&self, key: u16) -> Option<&Entry> {
-        self.entries
-            .iter()
-            .find(|e| e.key() == key && (e.bound() != Bound::None || e.score() == Score::NONE))
+    /// Returns the index of the matching key within a cluster
+    pub fn lookup_key(&self, key: u16) -> Option<usize> {
+        const BITS: u64 = 0x0001_0001_0001_0001;
+
+        let zeros = self.keys ^ (key as u64 * BITS);
+        let matches = zeros.wrapping_sub(BITS) & !zeros & (BITS << 15);
+
+        let index = (matches.trailing_zeros() / 16) as usize;
+        (index < NUM_ENTRIES_PER_CLUSTER
+            && (self.entries[index].bound() != Bound::None || self.entries[index].score() == Score::NONE))
+            .then_some(index)
+    }
+
+    /// Gets the 16 bit key corresponding to the given index
+    pub fn key(&self, index: usize) -> u16 {
+        (self.keys >> (index * 16)) as u16
+    }
+
+    pub fn add_key(&mut self, key: u16, index: usize) {
+        debug_assert!(index < NUM_ENTRIES_PER_CLUSTER);
+
+        // Clear the currently set bits at the index
+        self.keys &= !(0xFFFF << (index * 16));
+        // Add the new key to that index
+        self.keys |= (key as u64) << (index * 16);
     }
 }
 
@@ -164,12 +180,12 @@ impl TranspositionTable {
         let key = hash as u16;
         let tt_age = self.age();
 
-        let replacement_index = {
+        let replacement_index = cluster.lookup_key(key).unwrap_or_else(|| {
             let mut index = 0;
             let mut worst_quality = i32::MAX;
 
             for (i, entry) in cluster.entries.iter().enumerate() {
-                if entry.key() == key || entry.flags.bound() == Bound::None {
+                if entry.flags.bound() == Bound::None {
                     index = i;
                     break;
                 }
@@ -182,10 +198,11 @@ impl TranspositionTable {
             }
 
             index
-        };
+        });
 
+        let entry_key = cluster.key(replacement_index);
         let entry = &mut cluster.entries[replacement_index];
-        let same_key = key == entry.key();
+        let same_key = key == entry_key;
 
         // Keep the stored move if the new move is null for the same position
         if !(same_key && best_move.is_null()) {
@@ -203,11 +220,11 @@ impl TranspositionTable {
         }
 
         // Replace entry
-        entry.key = key;
         entry.score = score as i16;
         entry.eval = eval as i16;
         entry.depth = depth as u8;
         entry.flags = Flags::new(pv, bound, tt_age);
+        cluster.add_key(key, replacement_index);
     }
 
     pub fn clear(&self) {
@@ -218,16 +235,17 @@ impl TranspositionTable {
     pub fn entry(&self, hash: u64, ply: isize) -> Option<Entry> {
         let index = index(hash, self.len());
         debug_assert!(index < self.len());
-
         let cluster = unsafe { &*self.ptr().add(index) };
-        let entry = cluster.lookup_key(hash as u16);
-        entry.map(|e| Entry {
-            key: e.key,
-            best_move: e.best_move,
-            score: from_tt(e.score, ply),
-            eval: e.eval,
-            depth: e.depth,
-            flags: e.flags,
+
+        let index = cluster.lookup_key(hash as u16)?;
+        let entry = &cluster.entries[index];
+
+        Some(Entry {
+            best_move: entry.best_move,
+            score: from_tt(entry.score, ply),
+            eval: entry.eval,
+            depth: entry.depth,
+            flags: entry.flags,
         })
     }
 
@@ -320,5 +338,30 @@ mod tests {
         assert_eq!(flag.bound(), Bound::Lower);
         assert!(flag.pv());
         assert_eq!(23, flag.age());
+    }
+
+    #[test]
+    fn test_packed_keys() {
+        // let v: u64 = 0b1110_0110_0100_0011;
+        //
+        // let mut keys = 0u64;
+        // keys |= v << (16 * 2);
+        // println!("{:064b}", keys);
+
+        let n: u64 = 0x0001_0001_0001_0001;
+        println!("{:064b}", n);
+        // let needle = v * n;
+        // println!("{:064b}", needle);
+        // let zeros = keys ^ needle;
+        // println!("{:064b}", zeros);
+        // let matches = zeros.wrapping_sub(n) & !zeros & (n << 15);
+        // println!("{:064b}", matches);
+        // println!("{}", matches.trailing_zeros() / 16);
+
+        let high = 0x8000_8000_8000_8000u64;
+        println!("{:064b}", high);
+
+        let hi: u64 = 0x0001_0001_0001_0001 << 15;
+        println!("{:064b}", hi);
     }
 }
