@@ -294,7 +294,6 @@ pub fn search<Node: NodeType>(
     if !Node::ROOT
         && !in_check
         && !excluded
-        && data.stack[ply - 1].m.is_null()
         && data.stack[ply - 1].m.kind().is_quiet()
         && data.stack[ply - 1].eval != Score::NONE
     {
