@@ -297,9 +297,13 @@ pub fn search<Node: NodeType>(
         && data.stack[ply - 1].m.kind().is_quiet()
         && data.stack[ply - 1].eval != Score::NONE
     {
-        let bonus = (812 * (-data.stack[ply - 1].eval - static_eval) / 128).clamp(-200, 350);
-        data.quiet_history
-            .update(data.stack[ply - 1].threats, !stm, data.stack[ply - 1].m, bonus);
+        let bonus = (512 * (-data.stack[ply - 1].eval - static_eval) / 128).clamp(-1200, 1200);
+        data.quiet_history.update(
+            data.stack[ply - 1].threats,
+            !stm,
+            data.stack[ply - 1].m,
+            (bonus.abs() - depth * 200).max(0) * bonus.signum(),
+        );
     }
 
     if !Node::ROOT && !in_check && !excluded && data.stack[ply - 1].eval != Score::NONE {
