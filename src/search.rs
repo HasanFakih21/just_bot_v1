@@ -297,7 +297,7 @@ pub fn search<Node: NodeType>(
         && data.stack[ply - 1].m.kind().is_quiet()
         && data.stack[ply - 1].eval != Score::NONE
     {
-        let bonus = (-(data.stack[ply - 1].eval + static_eval) * 10).clamp(-1800, 1800) + 500;
+        let bonus = (512 * (-data.stack[ply - 1].eval - static_eval) / 128).clamp(-1200, 1200);
         data.quiet_history
             .update(data.stack[ply - 1].threats, !stm, data.stack[ply - 1].m, bonus);
     }
