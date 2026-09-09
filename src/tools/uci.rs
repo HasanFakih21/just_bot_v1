@@ -275,29 +275,21 @@ pub fn uci() {
 
 #[cfg(feature = "datagen")]
 pub fn genfens(args: &str) {
-    let args = args
-        .to_ascii_lowercase()
-        .split_ascii_whitespace()
-        .collect::<Vec<&str>>()
-        .as_slice();
-    let Some(Ok(amount)) = args.as_ref().first().map(|n| n.parse::<usize>()) else {
+    let lower_case = args.to_ascii_lowercase();
+    let args = lower_case.split_ascii_whitespace().collect::<Vec<_>>();
+    let Some((Ok(amount), args)) = args.split_first().map(|(n, rest)| (n.parse::<usize>(), rest)) else {
         eprintln!("info error: need to provide a valid number for how many positions to generate");
         return;
     };
 
-    let args = args.iter().skip(1);
-
     let mut seed = None;
-
-    match args {
-        [n, "seed", s, ..] => {
-            amount = n.parse::<usize>().unwrap_or(0);
-            seed = s.parse::<u64>().unwrap_or(0);
+    for chunk in args.chunks(2) {
+        if let [arg, value] = *chunk {
+            match arg {
+                "seed" if let Some(value) = value.parse::<u64>().ok() => seed = Some(value),
+                _ => continue,
+            }
         }
-        [n, ..] => {
-            amount = n.parse::<usize>().unwrap_or(0);
-        }
-        _ => (),
     }
 
     generate_random_openings(amount, 8, seed);

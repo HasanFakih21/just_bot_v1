@@ -11,8 +11,8 @@ pub struct BadRandomBoard;
 
 static SEED: Mutex<u64> = Mutex::new(0);
 
-pub fn generate_random_openings(amount: usize, plies: isize, seed: u64) {
-    if seed != 0 {
+pub fn generate_random_openings(amount: usize, plies: isize, seed: Option<u64>) {
+    if let Some(seed) = seed {
         *SEED.lock().unwrap() = seed;
     } else {
         *SEED.lock().unwrap() = rand::random();
@@ -65,6 +65,6 @@ pub mod tests {
 
     #[test]
     fn test_fengen() {
-        generate_random_openings(1, 8, 3493);
+        generate_random_openings(1, 8, Some(3493));
     }
 }
