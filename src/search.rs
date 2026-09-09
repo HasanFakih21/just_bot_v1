@@ -290,6 +290,18 @@ pub fn search<Node: NodeType>(
 
     let improving = improvement > 0;
 
+    // Update Quiet History Based on the Change in Evaluation
+    if !Node::ROOT
+        && !in_check
+        && !excluded
+        && data.stack[ply - 1].m.kind().is_quiet()
+        && data.stack[ply - 1].eval != Score::NONE
+    {
+        let bonus = (-(data.stack[ply - 1].eval + static_eval) * 10).clamp(-1800, 1800) + 500;
+        data.quiet_history
+            .update(data.stack[ply - 1].threats, !stm, data.stack[ply - 1].m, bonus);
+    }
+
     if !Node::ROOT && !in_check && !excluded && data.stack[ply - 1].eval != Score::NONE {
         // Hindsight Extension
         if depth < MAX_PLY as i32
