@@ -40,7 +40,7 @@ impl MovePicker {
         if self.status == Stage::HashMove {
             self.status = Stage::FirstNoisy;
             let tt_move = self.tt_move.unwrap();
-            if (!skip_quiets || !tt_move.kind().is_quiet()) && data.board.is_legal(tt_move) {
+            if !skip_quiets || !tt_move.kind().is_quiet() {
                 return Some(tt_move);
             }
         }

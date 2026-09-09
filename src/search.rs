@@ -201,7 +201,11 @@ pub fn search<Node: NodeType>(
     let mut depth = depth.min(MAX_PLY as i32 - 1);
 
     // Transposition Table Entries
-    let tt_entry = data.shared.tt.entry(data.board.hash(), ply);
+    let tt_entry = data
+        .shared
+        .tt
+        .entry(data.board.hash(), ply)
+        .filter(|e| data.board.is_legal(e.best_move()) || e.best_move().is_null());
     let tt_move = tt_entry.as_ref().map(|e| e.best_move()).filter(|m| !m.is_null());
     let tt_bound = tt_entry.as_ref().map(|e| e.bound());
     let tt_score = tt_entry.as_ref().map(|e| e.score()).filter(|s| *s != Score::NONE);
@@ -677,7 +681,11 @@ pub fn quiesce<Node: NodeType>(data: &mut SearchData, mut alpha: i32, beta: i32,
         return Score::TIMEOUT;
     }
 
-    let tt_entry = data.shared.tt.entry(data.board.hash(), ply);
+    let tt_entry = data
+        .shared
+        .tt
+        .entry(data.board.hash(), ply)
+        .filter(|e| data.board.is_legal(e.best_move()) || e.best_move().is_null());
     let tt_bound = tt_entry.as_ref().map(|e| e.bound());
     let tt_score = tt_entry.as_ref().map(|e| e.score()).filter(|s| *s != Score::NONE);
     let tt_was_pv = tt_entry.as_ref().map(|e| e.is_pv()).unwrap_or(false);
